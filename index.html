@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bible Verse App</title>
+  <style>
+    body { font-family: Arial, sans-serif; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 20px; }
+    .window { border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: auto; }
+    #selector { grid-column: span 2; margin-bottom: 20px; }
+    select { width: 100%; padding: 10px; font-size: 16px; }
+    .word { cursor: pointer; text-decoration: underline; }
+    .definition { font-style: italic; color: #555; }
+  </style>
+</head>
+<body>
+  <div id="selector">
+    <label for="verse-select">Select Verse:</label>
+    <select id="verse-select">
+      <option value="">-- Choose a Verse --</option>
+    </select>
+  </div>
+  <div class="window" id="spanish-window">Spanish Verse</div>
+  <div class="window" id="english-window">English Verse</div>
+  <div class="window" id="definitions-window">Definitions</div>
+  <div class="window" id="greek-window">Greek Verse</div>
+
+  <script>
+    // Load JSON data (replace with your file paths)
+    async function loadData(file) {
+      const response = await fetch(`data/${file}`);
+      return response.json();
+    }
+
+    let spanishData, englishData, greekData, strongsData;
+
+    async function init() {
+      spanishData = await loadData('spanish.json'); // e.g., spa-rvr.json
+      englishData = await loadData('english.json'); // e.g., eng-kjv.json
+      greekData = await loadData('greek.json'); // e.g., grc-byz.json
+      strongsData = await loadData('strongs-greek.json');
+
+      // Populate selector with verses (example: loop through books/chapters/verses)
+      const select = document.getElementById('verse-select');
+      // Assuming data structure: { books: [{ name: 'Genesis', chapters: [{ verses: ['text1', 'text2'] }] }] }
+      spanishData.books.forEach((book, bookIdx) => {
+        book.chapters.forEach((chapter, chapIdx) => {
+          chapter.verses.forEach((verse, verseIdx) => {
+            const option = document.createElement('option');
+            option.value = `${bookIdx}-${chapIdx}-${verseIdx}`;
+            option.text = `${book.name} ${chapIdx + 1}:${verseIdx + 1}`;
+            select.appendChild(option);
+          });
+        });
+      });
+    }
+
+    document.getElementById('verse-select').addEventListener('change', async (e) => {
+      if (!e.target.value) return;
+      const [bookIdx, chapIdx, verseIdx] = e.target.value.split('-').map(Number);
+
+      // Spanish Verse
+      const spanishVerse = spanishData.books[bookIdx].chapters[chapIdx].verses[verseIdx];
+      document.getElementById('spanish-window').innerHTML = spanishVerse;
+
+      // English Verse
+      const englishVerse = englishData.books[bookIdx].chapters[chapIdx].verses[verseIdx];
+      document.getElementById('english-window').innerHTML = englishVerse;
+
+      // Greek Verse (with Strong's links if available)
+      const greekVerse = greekData.books[bookIdx].chapters[chapIdx].verses[verseIdx];
+      // Assuming greekVerse includes words with Strong's, e.g., "word<G123> word<G456>"
+      const greekHtml = greekVerse.split(' ').map(word => {
+        const match = word.match(/(.+)<G(\d+)>/);
+        if (match) {
+          const [_, w, num] = match;
+          return `<span class="word" data-strongs="${num}">${w}</span>`;
+        }
+        return word;
+      }).join(' ');
+      document.getElementById('greek-window').innerHTML = greekHtml;
+
+      // Definitions (Greek from Strong's, Spanish via API)
+      const definitionsDiv = document.getElementById('definitions-window');
+      definitionsDiv.innerHTML = '<h3>Greek Definitions:</h3>';
+      // Add Greek defs (from strongsData)
+      // For Spanish: Split verse into words, fetch defs
+      const spanishWords = spanishVerse.split(' ').filter(w => w.trim());
+      definitionsDiv.innerHTML += '<h3>Spanish Word Definitions (English):</h3>';
+      for (const word of spanishWords) {
+        const def = await fetchSpanishDefinition(word); // Function below
+        definitionsDiv.innerHTML += `<p>${word}: ${def}</p>`;
+      }
+
+      // Click handler for Greek words
+      document.querySelectorAll('.word').forEach(el => {
+        el.addEventListener('click', () => {
+          const num = el.dataset.strongs;
+          const def = strongsData[`G${num}`].definition;
+          alert(`Definition for G${num}: ${def}`);
+        });
+      });
+    });
+
+    async function fetchSpanishDefinition(word) {
+      // Use Merriam-Webster API (replace with your key)
+      const apiKey = 'YOUR_API_KEY_HERE'; // Get free from dictionaryapi.com
+      try {
+        const response = await fetch(`https://www.dictionaryapi.com/api/v3/references/spanish/json/${word}?key=${apiKey}`);
+        const data = await response.json();
+        return data[0]?.shortdef[0] || 'No definition found';
+      } catch (e) {
+        return 'Error fetching definition';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
